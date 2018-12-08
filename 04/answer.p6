@@ -6,11 +6,13 @@ class Record {
     has $.time;
     has $.action;
     has $.orig;
+    has $.minute;
 
     method build-from-log($line) {
         my $m = $line ~~ /^ '[' (\d\d\d\d) '-' (\d\d) '-' (\d\d) ' ' (\d\d) ':' (\d\d) '] ' (.*) $/;
         return Record.new(
-            time => DateTime.new(:year($m[0].Int), :month($m[1].Int), :day($m[2].Int), :hour($m[3].Int), :minute($m[4].Int)),
+            time => $m[0].Str ~ $m[1].Str ~ $m[2].Str ~ $m[3].Str ~ $m[4].Str,
+            minute => $m[4].Int,
             action => $m[5].Str,
             orig => $m.orig,
         );
@@ -35,12 +37,11 @@ class Guard {
         return Guard.new(:id($id), :sleep-minutes(0));
     }
 
-    method falls-asleep($time) { $!start-sleep = $time.minute; }
-    method wakes-up($time) {
-        my $wake-up = $time.minute;
+    method falls-asleep($minute) { $!start-sleep = $minute; }
+    method wakes-up($wake-up) {
         $.sleep-minutes += $wake-up - $!start-sleep;
         #say "$.id fell asleep from $!start-sleep to $wake-up!";
-        for $!start-sleep .. $wake-up -1 {
+        for $!start-sleep ..^ $wake-up {
             %.minutes{$_} //= 0;
             ++%.minutes{$_};
         }
@@ -65,23 +66,18 @@ log('Record sleeping history');
 my $id;
 for @records {
     when so .guard-id() { $id = .guard-id; } # so = "force to bool"
-    when .falls-asleep { %guards{$id}.falls-asleep( .time ); }
-    when .wakes-up { %guards{$id}.wakes-up( .time ); }
+    when .falls-asleep { %guards{$id}.falls-asleep( .minute ); }
+    when .wakes-up { %guards{$id}.wakes-up( .minute ); }
 }
 
 log('Determining sleepiest minutes');
 .calculate-sleepiest-minute() for %guards.values;
 
-log('Solve part one');
-my $sleepiest = %guards.values.grep({ ?$_.sleep-minutes }).sort({ $_.sleep-minutes }).tail;
-say "Guard with the most minutes asleep:";
-my $minute = $sleepiest.sleepiest-minute;
-say "Sleepiest minute: {$minute.key}";
+# ? = "prefix ?^" = "convert the following value to a boolean"
+my $dude = %guards.values.grep({ ?$_.sleep-minutes }).sort({ $_.sleep-minutes }).tail;
+my $minute = $dude.sleepiest-minute;
+say "Answer to part one is guard {$dude.id} @ {$minute.fmt("%s/%s")}: {$dude.id * $minute.key}";
 
-say "Answer to part one: " ~ ($sleepiest.id * $minute.key);
-
-log('Solve part two');
-$sleepiest = %guards.values.grep({ ?$_.sleep-minutes }).sort({ $_.sleepiest-minute.value }).tail;
-$minute = $sleepiest.sleepiest-minute;
-say $minute;
-say "Answer to part two: " ~ ($sleepiest.id * $minute.key);
+$dude = %guards.values.grep({ ?$_.sleep-minutes }).sort({ $_.sleepiest-minute.value }).tail;
+$minute = $dude.sleepiest-minute;
+say "Answer to part two is guard {$dude.id} @ {$minute.fmt("%s/%s")}: {$dude.id * $minute.key}";
