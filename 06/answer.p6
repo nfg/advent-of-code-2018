@@ -49,26 +49,19 @@ class Board {
         }
     }
 
-    multi sub idx ($x, $y) {
-        return "$x.$y"
-    }
-
-    multi sub idx (Point $point) {
-        return idx($point.x, $point.y)
-    }
+    multi sub idx ($x, $y) { return "$x.$y" }
 
     ################################################################################
 
     # Step zero: Record the points.
     method add-point(Point $point, $label) {
-        %!board{idx($point)}.mark($label);
-        say "ADDING POINT: {$point.gist} $label";
+        %!board{idx($point.x, $point.y)}.mark($label);
         @!next.append($point);
     }
 
     # Step one: Find potential new points.
     method find-potential-points() {
-        return False unless @!next;
+        return unless @!next;
         my @points = @!next;
         @!next = ();
 
@@ -83,30 +76,21 @@ class Board {
             self.add-potential-point($x, $y - 1, $label);
             self.add-potential-point($x, $y + 1, $label);
         }
-        return True;
     }
 
     # Step two: Add potential new points.
     method add-potential-point(Int $x, Int $y, Str $label) {
         my $idx = idx($x, $y);
         my $point = %!board{$idx};
-        return False unless $point; # DNE
-        return False unless $point.add-potential-label($label);
+        return unless $point && $point.add-potential-label($label);
         %!potentials{$idx} = $point; # Track changes to be resolved.
-        return True;
     }
 
     # Step three: Resolve potential points.
     method resolve() {
-        my $ret = False;
-        for %!potentials.values -> Point $point {
-            if $point.resolve() {
-                $ret = True;
-                @!next.append($point);
-            }
-        }
+        @!next = %!potentials.values.grep: *.resolve();
         %!potentials = ();
-        return $ret;
+        return @!next.Bool;
     }
 
     method dump() {
@@ -119,10 +103,14 @@ class Board {
             say @row.join;
         }
 
-        say "Potential points to resolve";
-        say "{$_.x}.{$_.y} - {$_.potentials}" for %!potentials.values;
-        say "\nAlso, the next points to look at";
-        say "{$_.x}.{$_.y}" for @!next;
+        if %!potentials {
+            say "Potential points to resolve";
+            say "{$_.x}.{$_.y} - {$_.potentials}" for %!potentials.values;
+        }
+        if @!next {
+            say "\nAlso, the next points to look at";
+            say @!next.map({"{$_.x}.{$_.y}"}).join(", ");
+        }
         say "\n";
     }
 }
@@ -143,14 +131,12 @@ log "Maximums: x: $max_x y: $max_y";
 my $board = Board.new(:$max_x, :$max_y);
 log "Initialized board";
 
-for %points.pairs { # "label" => $point
-    $board.add-point($_.value, $_.key);
-}
+$board.add-point($_.value, $_.key) for %points.pairs;
 log "Added points";
 
 loop {
     $board.dump();
-    last unless $board.find-potential-points();
-    $board.dump();
+    $board.find-potential-points();
     last unless $board.resolve();
 }
+$board.dump();
