@@ -113,7 +113,35 @@ class Board {
         }
         say "\n";
     }
+
+    method solve_part_one() {
+        my @infinites;
+        for ^$!max_x -> $x {
+            @infinites.append(%!board{idx($x, 0)}.label);
+            @infinites.append(%!board{idx($x, $!max_y - 1)}.label);
+        }
+        for ^$!max_y -> $y {
+            @infinites.append(%!board{idx(0, $y)}.label);
+            @infinites.append(%!board{idx($!max_x - 1, $y)}.label);
+        }
+        @infinites = @infinites.unique;
+        @infinites.append('bunk');
+
+        my %counts;
+        for %!board.values.map({ $_.label }) -> $label {
+            %counts{$label} //= 0;
+            ++%counts{$label};
+        }
+
+        for %counts.pairs.sort(*.value).reverse -> $pair {
+            next if $pair.key ~~ any @infinites;
+            return $pair.value;
+        }
+        die "FAIL!!";
+    }
 }
+
+################################################################################
 
 log "Starting";
 my $index = 'a';
@@ -135,8 +163,13 @@ $board.add-point($_.value, $_.key) for %points.pairs;
 log "Added points";
 
 loop {
-    $board.dump();
+    #$board.dump();
     $board.find-potential-points();
     last unless $board.resolve();
 }
-$board.dump();
+log "Constructed board";
+#$board.dump();
+
+log "Solving part one";
+my $answer = $board.solve_part_one();
+log "Solution: $answer";
