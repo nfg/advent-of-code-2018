@@ -5,6 +5,11 @@ sub log(Any \msg) { say "[{DateTime.now()}] {msg.gist}"; }
 class Point {
     has $.x;
     has $.y;
+    has $.label;
+
+    method distance($point) {
+        return abs($.x - $point.x) + abs($.y - $point.y);
+    }
 }
 
 class BoardPoint is Point {
@@ -54,8 +59,8 @@ class Board {
     ################################################################################
 
     # Step zero: Record the points.
-    method add-point(Point $point, $label) {
-        %!board{idx($point.x, $point.y)}.mark($label);
+    method add-point(Point $point) {
+        %!board{idx($point.x, $point.y)}.mark($point.label);
         @!next.append($point);
     }
 
@@ -139,27 +144,43 @@ class Board {
         }
         die "FAIL!!";
     }
+
+    method solve_part_two(@source_points) {
+        my $max_distance = 10_000;
+        my @ok_points;
+        for ^$!max_x -> $x {
+            for ^$!max_y -> $y {
+                my $label = %!board{idx($x, $y)}.label;
+                my $point = Point.new(:$x, :$y, :$label);
+                my $total_distance = @source_points.map({ $point.distance($_)}).sum;
+                next unless $total_distance < $max_distance;
+                @ok_points.append($point);
+            }
+        }
+        return @ok_points.elems();
+    }
 }
 
 ################################################################################
 
 log "Starting";
 my $index = 'a';
-my %points = $*IN.lines.map({
+my @points = $*IN.lines.map({
     my $m = $_ ~~ m/^ (\d+) ',' \s* (\d+) $/
         or die "Bunk line. :( {$_.gist}";
-    $index++ => Point.new(:x($m[0].Int), :y($m[1].Int))
+    my $label = $index++;
+    Point.new(:x($m[0].Int), :y($m[1].Int), :$label)
 });
 log "Loaded points";
 
-my $max_x = %points.values.sort( *.x ).tail.x + 1;
-my $max_y = %points.values.sort( *.y ).tail.y + 1;
+my $max_x = @points.sort( *.x ).tail.x + 1;
+my $max_y = @points.sort( *.y ).tail.y + 1;
 log "Maximums: x: $max_x y: $max_y";
 
 my $board = Board.new(:$max_x, :$max_y);
 log "Initialized board";
 
-$board.add-point($_.value, $_.key) for %points.pairs;
+$board.add-point($_) for @points;
 log "Added points";
 
 loop {
@@ -173,3 +194,7 @@ log "Constructed board";
 log "Solving part one";
 my $answer = $board.solve_part_one();
 log "Solution: $answer";
+
+log "Solving part two";
+$answer = $board.solve_part_two(@points);
+log $answer;
