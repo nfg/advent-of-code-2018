@@ -16,19 +16,11 @@ class Record {
         );
     }
     method guard-id() {
-        if $.orig ~~ / 'Guard #' (\d+) ' begins shift' / -> $m {
-            return $m[0].Int;
-        }
-        return False
+        my $m = $.orig ~~ / 'Guard #' (\d+) ' begins shift' /;
+        return $m ?? $m[0].Int !! False
     }
-    method falls-asleep() {
-        my $m = $.orig ~~ /'falls asleep'/;
-        return $m.Bool;
-    }
-    method wakes-up() {
-        my $m = $.orig ~~ /'wakes up'/;
-        return $m.Bool;
-    }
+    method falls-asleep() { return $.orig ~~ /'falls asleep'/; }
+    method wakes-up() { return $.orig ~~ /'wakes up'/; }
 }
 
 class Guard {
@@ -37,6 +29,8 @@ class Guard {
     has %.minutes;
 
     has $!start-sleep;
+    has $.sleepiest-minute is rw;
+
     method build-guard($id) {
         return Guard.new(:id($id), :sleep-minutes(0));
     }
@@ -45,17 +39,16 @@ class Guard {
     method wakes-up($time) {
         my $wake-up = $time.minute;
         $.sleep-minutes += $wake-up - $!start-sleep;
-
-        say "$.id fell asleep from $!start-sleep to $wake-up!";
-
-        for $!start-sleep .. $wake-up - 1 {
+        #say "$.id fell asleep from $!start-sleep to $wake-up!";
+        for $!start-sleep .. $wake-up -1 {
             %.minutes{$_} //= 0;
             ++%.minutes{$_};
         }
     }
 
-    method sleepiest-minute() {
-        return %.minutes.sort({ $_.value }).tail.key;
+    method calculate-sleepiest-minute() {
+        return unless %.minutes;
+        $.sleepiest-minute = %.minutes.sort({ $_.value }).tail;
     }
 }
 
@@ -64,37 +57,31 @@ my @records = $*IN.lines().map({ Record.build-from-log($_) }).sort: *.time;
 
 log('Construct guards');
 my %guards;
-
-say @records;
-
-for @records.grep({$_.guard-id}) {
-    my $id = .guard-id;
-    my $guard = Guard.new(:$id);
-    %guards{$id} = $guard;
+for @records.grep({$_.guard-id}).map: *.guard-id -> $id {
+    %guards{$id} = Guard.new(:$id);
 }
 
 log('Record sleeping history');
 my $id;
 for @records {
-    if .guard-id() {
-        $id = .guard-id;
-    }
-    elsif .falls-asleep {
-        %guards{$id}.falls-asleep( .time );
-    }
-    elsif .wakes-up {
-        %guards{$id}.wakes-up( .time );
-    }
-    else {
-        fail "Unexpected input!";
-    }
+    when so .guard-id() { $id = .guard-id; } # so = "force to bool"
+    when .falls-asleep { %guards{$id}.falls-asleep( .time ); }
+    when .wakes-up { %guards{$id}.wakes-up( .time ); }
 }
 
+log('Determining sleepiest minutes');
+.calculate-sleepiest-minute() for %guards.values;
+
+log('Solve part one');
 my $sleepiest = %guards.values.grep({ ?$_.sleep-minutes }).sort({ $_.sleep-minutes }).tail;
 say "Guard with the most minutes asleep:";
-say $sleepiest;
-my $minute = $sleepiest.sleepiest-minute();
-say "Sleepiest minute: $minute";
+my $minute = $sleepiest.sleepiest-minute;
+say "Sleepiest minute: {$minute.key}";
 
-say "Answer to part one: " ~ ($sleepiest.id * $minute)
+say "Answer to part one: " ~ ($sleepiest.id * $minute.key);
 
+log('Solve part two');
+$sleepiest = %guards.values.grep({ ?$_.sleep-minutes }).sort({ $_.sleepiest-minute.value }).tail;
+$minute = $sleepiest.sleepiest-minute;
+say $minute;
+say "Answer to part two: " ~ ($sleepiest.id * $minute.key);
