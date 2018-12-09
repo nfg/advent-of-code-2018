@@ -15,23 +15,20 @@ class Point {
 class BoardPoint is Point {
     has $.label;
     has @.potentials;
-    has $.resolved;
 
     method mark($label) {
-        die "Already marked!" if $.resolved;
+        die "Already marked!" if ?$!label;
         $!label = $label;
-        $!resolved = True;
     }
     method add-potential-label($label) {
-        return False if $.resolved;
+        return False if ?$.label;
         return False if $label ~~ any @.potentials;
         @.potentials.append($label);
         return True;
     }
     method resolve {
-        return False if $.resolved;
+        return False if ?$.label;
         return False unless @.potentials;
-        $!resolved = True;
         my $found_label = @.potentials.elems == 1;
         $!label = $found_label ?? @.potentials[0] !! 'bunk';
         return True;
@@ -49,7 +46,7 @@ class Board {
     submethod TWEAK() {
         for ^$!max_x -> $x {
             for ^$!max_y -> $y {
-                %!board{idx($x, $y)}= BoardPoint.new(:resolved(False), :$x, :$y);
+                %!board{idx($x, $y)}= BoardPoint.new(:$x, :$y);
             }
         }
     }
