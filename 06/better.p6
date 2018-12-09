@@ -29,24 +29,31 @@ class Board {
         $!max_x = @!points.sort( *.x ).tail.x + 1;
         $!max_y = @!points.sort( *.y ).tail.y + 1;
 
-        for ^$!max_x -> $x {
-            say "AT $x.0 out of $!max_x.$!max_y";
-            for ^$!max_y -> $y {
-                my $point = Point.new(:$x, :$y);
-                my %distances = @!points.map({
-                    $_.label => $point.distance($_)
-                });
-                my $total = %distances.values.sum;
-                my @sorted = %distances.sort( *.value );
+        # perl6 better.p6  208.42s user 0.78s system 99% cpu 3:30.53 total
+        # perl6 better.p6  178.83s user 1.91s system 268% cpu 1:07.32 total
+        # perl6 better.p6  238.47s user 2.05s system 270% cpu 1:29.02 total
 
-                my $label = @sorted[0].key;
-                if ?@sorted[1] && @sorted[0].value == @sorted[1].value {
-                    $label = 'bunk';
-                }
-                $point.mark($label, $total);
-                %!board{idx($x, $y)} = $point;
+        my @list;
+        for ^$!max_x -> $x {
+            for ^$!max_y -> $y {
+                push @list, ($x, $y);
             }
         }
+
+        %!board = @list.race.map({
+            my ($x, $y) = $_[0,1];
+
+            my %distances = @!points.map({
+                $_.label => abs($x - $_.x) + abs($y - $_.y);
+            });
+            my @sorted = %distances.sort( *.value );
+            my $total-distance = @sorted.map(*.value).sum;
+            my $label = @sorted[0].key;
+            if ?@sorted[1] && @sorted[0].value == @sorted[1].value {
+                $label = 'bunk';
+            }
+            "$x.$y" => Point.new(:$x, :$y, :$total-distance, :$label);
+        });
     }
 
     multi sub idx ($x, $y) { return "$x.$y" }
