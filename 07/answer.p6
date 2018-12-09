@@ -30,5 +30,3 @@ while (%nodes) {
     #say @result;
 }
 say @result.join;
-
-
