@@ -10,9 +10,7 @@ class Node {
         return @.metadata.sum + $child-metadata;
     }
     method part2() {
-        if ! @.children {
-            return @.metadata.sum;
-        }
+        return @.metadata.sum unless @.children;
         return @.metadata.map({
             my $node = @.children[$_ - 1];
             ?$node ?? $node.part2 !! 0;
@@ -29,19 +27,10 @@ class ParseState {
     }
 
     method parse-node() {
-        my $m = $!data ~~ s/^ (\d+) \s+ (\d+) \s+ //;
-
-        my $num-children = $m[0].Int;
-        my $num-metadata = $m[1].Int;
-
+        my $m = $!data ~~ s/^ $<num-children>=(\d+) \s+ $<num-metadata>=(\d+) \s+ //;
         my (@children, @metadata);
-        for ^$num-children {
-            @children.append(self.parse-node())
-        }
-        for ^$num-metadata {
-            @metadata.append(self.parse-metadata())
-        }
-
+        @children.append(self.parse-node) for ^$m<num-children>.Int;
+        @metadata.append(self.parse-metadata) for ^$m<num-metadata>.Int;
         return Node.new(:@children, :@metadata);
     }
 
