@@ -1,9 +1,21 @@
 #!/usr/bin/env perl6
 
-my $test = 'position=< 9,  1> velocity=< 0,  2>';
 grammar LineEntry {
     rule TOP { 'position=' <point> 'velocity=' <point> }
     rule point { '<' (\-? \d+) ',' (\-? \d+) '>' }
+}
+
+class ListOfPoints {
+    has @.points;
+    method move() { @.points.map: *.move; }
+    method range-x() {
+        my @sorted = @.points.map({$_.x}).sort;
+        return @sorted.head, @sorted.tail;
+    }
+    method range-y() {
+        my @sorted = @.points.map({$_.y}).sort;
+        return @sorted.head, @sorted.tail;
+    }
 }
 
 class Point {
@@ -12,21 +24,9 @@ class Point {
     has $.v-x;
     has $.v-y;
 
-    method min() {
-        my $min-x = 0;
-        my $min-y = 0;
-        if $.x < 0 {
-            $min-x = abs($.x / $.v-x).ceiling;
-        }
-        if $.y < 0 {
-            $min-y = abs($.y / $.v-y).ceiling;
-        }
-        return max($min-x, $min-y);
-    }
-
-    method move($count = 1) {
-        $!x += ($.v-x * $count);
-        $!y += ($.v-y * $count);
+    method move() {
+        $!x += $.v-x;
+        $!y += $.v-y;
     }
 }
 
@@ -44,18 +44,12 @@ class LineEntryAction {
     }
 }
 
-sub print-stars(@points, $skip) {
-    my $min-x = @points.map({ $_.x }).sort.head;
-    my $max-x = @points.map({ $_.x }).sort.tail;
-    my $min-y = @points.map({ $_.y }).sort.head;
-    my $max-y = @points.map({ $_.y }).sort.tail;
-
-    if $skip && ($min-x < 0 || $min-y < 0) {
-        return False;
-    }
+sub print-stars($list) {
+    my ($min-x, $max-x) = $list.range-x;
+    my ($min-y, $max-y) = $list.range-y;
 
     my %map;
-    for @points {
+    for $list.points {
         %map{ $_.y }{ $_.x } = '*';
     }
     for $min-y .. $max-y -> $y {
@@ -66,36 +60,47 @@ sub print-stars(@points, $skip) {
         my @row = ($min-x..$max-x).map({ %map{$y}{$_} ?? '*' !! ' ' });
         say "{sprintf('%4d', $y)}: " ~ join "", @row;
     }
-    return True;
 }
 
-sub MAIN (Str $filename, Bool $skip=False) {
+sub MAIN (Str $filename) {
     my $fh = open $filename, :r;
     my @points = $fh.lines.map({ LineEntry.parse( $_, actions => LineEntryAction.new).made });
+    my $list = ListOfPoints.new(:@points);
     $fh.close;
 
-    my @yarr = @points.map: *.min;
-    say @yarr;
-
-    my $min = @points.map(*.min).sort.tail;
-    say "MIN: $min";
-    @points.map: *.move($min);
-
     my $count = 0;
+    my $range = 100;
+
+    $list.move for ^10000;
+
+    loop {
+        my ($min-x, $max-x) = $list.range-x;
+        my $x = $max-x - $min-x;
+        my ($min-y, $max-y) = $list.range-y;
+        my $y = $max-y - $min-y;
+        if $count %% 100 {
+            say "AT $count [$x $y]";
+        }
+        last if $x < 100 && $y < 50;
+
+        NEXT { ++$count; $list.move }
+    }
+
+    my $quit;
     loop {
         say "At step $count:";
-        print-stars(@points, $skip) or do {
-            ++$count;
-            @points.map: *.move;
-            next;
-        };
-        my $answer = prompt("Step forward? ");
-        if $answer ~~ /^ y | yes $/ {
-            ++$count;
-            @points.map: *.move;
-            next;
+        print-stars($list);
+        loop {
+            my $answer = prompt("Step forward? ");
+            last if $answer ~~ /^ y | yes $/;
+            if $answer ~~ /^ n | no $/ {
+                $quit = True;
+                last;
+            }
         }
-        say "Last step: $count";
-        last;
+        last if $quit;
+        ++$count;
+        $list.move;
     }
+    say "Last step: $count";
 }
