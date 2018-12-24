@@ -1,33 +1,82 @@
 #!/usr/bin/env perl6
 
+class Point {
+    has Int $.x;
+    has Int $.y;
+    has Int $.v-x;
+    has Int $.v-y;
+
+    method displace($count) {
+        my $x = $!x + ($count * $.v-x);
+        my $y = $!y + ($count * $.v-y);
+        return Point.new(:$x, :$y, :$.v-x, :$.v-y);
+    }
+}
+
+class StarMap {
+    has @.points;
+    has Int $!min-x;
+    has Int $!max-x;
+    has Int $!min-y;
+    has Int $!max-y;
+    has Int $.count;
+
+    my %memo;
+
+    submethod TWEAK() {
+        my @sorted = @!points.map({$_.x}).sort;
+        $!min-x = @sorted.head;
+        $!max-x = @sorted.tail;
+        @sorted = @!points.map({$_.y}).sort;
+        $!min-y = @sorted.head;
+        $!max-y = @sorted.tail;
+        return;
+    }
+
+    method displace($count) {
+        my @new-list = @.points.map: *.displace($count);
+        return StarMap.new(:points(@new-list), :$count);
+    }
+    method area() {
+        return abs($!max-x - $!min-x) * abs($!max-y - $!min-y);
+    }
+
+    method print-stars() {
+        return if self.area() > 10_000;
+
+        my %map;
+        %map{ $_.y }{ $_.x } = '*' for @.points;
+        for $!min-y .. $!max-y -> $y {
+            if ! %map{$y} {
+                say "{sprintf('%4d', $y)}:";
+                next;
+            }
+            my @row = ($!min-x..$!max-x).map({ %map{$y}{$_} ?? '*' !! ' ' });
+            say "{sprintf('%4d', $y)}: " ~ join "", @row;
+        }
+    }
+    # -1 = shrinking
+    # 0  = found
+    # +1 = growing
+    method check() {
+        if ?%memo{$!count} {
+            return %memo{$!count}
+        }
+
+        my $previous = self.displace(-1);
+        my $next = self.displace(1);
+        my $answer = 1;
+        if self.area < $previous.area {
+            # FOUND!
+            $answer = self.area < $next.area ?? 0 !! -1;
+        }
+        return %memo{$!count} = $answer;
+    }
+}
+
 grammar LineEntry {
     rule TOP { 'position=' <point> 'velocity=' <point> }
     rule point { '<' (\-? \d+) ',' (\-? \d+) '>' }
-}
-
-class ListOfPoints {
-    has @.points;
-    method move() { @.points.map: *.move; }
-    method range-x() {
-        my @sorted = @.points.map({$_.x}).sort;
-        return @sorted.head, @sorted.tail;
-    }
-    method range-y() {
-        my @sorted = @.points.map({$_.y}).sort;
-        return @sorted.head, @sorted.tail;
-    }
-}
-
-class Point {
-    has $.x;
-    has $.y;
-    has $.v-x;
-    has $.v-y;
-
-    method move() {
-        $!x += $.v-x;
-        $!y += $.v-y;
-    }
 }
 
 class LineEntryAction {
@@ -44,63 +93,64 @@ class LineEntryAction {
     }
 }
 
-sub print-stars($list) {
-    my ($min-x, $max-x) = $list.range-x;
-    my ($min-y, $max-y) = $list.range-y;
-
-    my %map;
-    for $list.points {
-        %map{ $_.y }{ $_.x } = '*';
-    }
-    for $min-y .. $max-y -> $y {
-        if ! %map{$y} {
-            say "{sprintf('%4d', $y)}:";
-            next;
-        }
-        my @row = ($min-x..$max-x).map({ %map{$y}{$_} ?? '*' !! ' ' });
-        say "{sprintf('%4d', $y)}: " ~ join "", @row;
-    }
-}
-
-sub MAIN (Str $filename) {
+sub MAIN (Str $filename, Int $step = 10000) {
+    die "Invalid step!" if $step <= 0;
     my $fh = open $filename, :r;
     my @points = $fh.lines.map({ LineEntry.parse( $_, actions => LineEntryAction.new).made });
-    my $list = ListOfPoints.new(:@points);
+    my $map = StarMap.new(:@points, :count(0));
     $fh.close;
 
+    my $next-step = $step;
     my $count = 0;
-    my $range = 100;
-
-    $list.move for ^10000;
-
-    loop {
-        my ($min-x, $max-x) = $list.range-x;
-        my $x = $max-x - $min-x;
-        my ($min-y, $max-y) = $list.range-y;
-        my $y = $max-y - $min-y;
-        if $count %% 100 {
-            say "AT $count [$x $y]";
-        }
-        last if $x < 100 && $y < 50;
-
-        NEXT { ++$count; $list.move }
-    }
-
+    my $moving-forward = True;
+    my $new-map;
     my $quit;
+
+    # Fake binary search.
     loop {
-        say "At step $count:";
-        print-stars($list);
+        $new-map = $map.displace($count);
+
+        my $result = $new-map.check;
+        if $result == -1 {
+            # It's shrinking
+            if ! $moving-forward {
+                $next-step = Int($next-step / 2);
+                say "Moving forward (numbers shrinking) [$next-step]";
+                die "BUNK STEP!" if $next-step < 1;
+            }
+            $moving-forward = True;
+        }
+        elsif $result == 1 {
+            if $moving-forward {
+                $next-step = Int($next-step / 2);
+                say "Moving backward (numbers increasing) [$next-step]";
+                die "BUNK STEP!" if $next-step < 1;
+            }
+            $moving-forward = False;
+        }
+        else {
+            last;
+        }
+
+        $new-map.print-stars;
+        $quit = False;
+        my $next = $moving-forward ?? $count + $next-step !! $count - $next-step;
         loop {
-            my $answer = prompt("Step forward? ");
+
+            say "AT COUNT $count [next $next]";
+            my $answer = prompt("Continue? ");
             last if $answer ~~ /^ y | yes $/;
-            if $answer ~~ /^ n | no $/ {
+            if $answer ~~ /^ n | no | q | quit $/ {
                 $quit = True;
                 last;
             }
         }
         last if $quit;
-        ++$count;
-        $list.move;
+        $count = $next;
     }
-    say "Last step: $count";
+    if ! $quit {
+        say "SOLVED (?) AT $count";
+        $new-map.print-stars;
+    }
+    exit;
 }
