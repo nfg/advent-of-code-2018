@@ -93,7 +93,7 @@ class LineEntryAction {
     }
 }
 
-sub MAIN (Str $filename, Int $step = 10000) {
+sub MAIN (Str $filename, Int $step = 10000, Bool $interactive = False) {
     die "Invalid step!" if $step <= 0;
     my $fh = open $filename, :r;
     my @points = $fh.lines.map({ LineEntry.parse( $_, actions => LineEntryAction.new).made });
@@ -115,7 +115,7 @@ sub MAIN (Str $filename, Int $step = 10000) {
             # It's shrinking
             if ! $moving-forward {
                 $next-step = Int($next-step / 2);
-                say "Moving forward (numbers shrinking) [$next-step]";
+                say "Moving forward (numbers shrinking) [$next-step]" if $interactive;
                 die "BUNK STEP!" if $next-step < 1;
             }
             $moving-forward = True;
@@ -123,7 +123,7 @@ sub MAIN (Str $filename, Int $step = 10000) {
         elsif $result == 1 {
             if $moving-forward {
                 $next-step = Int($next-step / 2);
-                say "Moving backward (numbers increasing) [$next-step]";
+                say "Moving backward (numbers increasing) [$next-step]" if $interactive;
                 die "BUNK STEP!" if $next-step < 1;
             }
             $moving-forward = False;
@@ -132,11 +132,15 @@ sub MAIN (Str $filename, Int $step = 10000) {
             last;
         }
 
-        $new-map.print-stars;
+        $new-map.print-stars if $interactive;
         $quit = False;
         my $next = $moving-forward ?? $count + $next-step !! $count - $next-step;
-        loop {
+        if ! $interactive {
+            $count = $next;
+            next;
+        }
 
+        loop {
             say "AT COUNT $count [next $next]";
             my $answer = prompt("Continue? ");
             last if $answer ~~ /^ y | yes $/;
